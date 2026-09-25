@@ -1,0 +1,18 @@
+Inicialmente fiz a implementação manualmente e então fiz com que uma IA revisasse meu código.
+
+Na primeira revisão, a IA fez as seguintes observações:
+- Factories `translation`, `rotation`, `scale` are defined as free static functions
+   (Transform2D.cpp:4,11,20) instead of `Transform2D::` members. The declarations in
+   Transform2D.hpp:41-43 are never defined -> link error when called
+   (compiler also warns `-Wunused-function`).
+- `operator*` (lines 27-38) and `operator*=` (lines 40-48) use uninitialized loop
+   counters `i`, `j`, `k` -> undefined behavior (compiler warns `-Wuninitialized`).
+
+Após aplicar as devidas correções assistidas pela IA, esse foi o resultado da segunda revisão:
+- Factories `translation`/`rotation`/`scale`: free static functions ->
+  `Transform2D::` members (report-0.0.1 item 1).
+- `cos`/`sin` -> `std::cos`/`std::sin`.
+- Loop counters in `operator*` (i, j, k) and `operator*=` (i, j) initialized
+  (report-0.0.1 item 2).
+- Row-major DirectX matrix convention intact; division preconditions
+  (`|scalar| > EPSILON`) honored.

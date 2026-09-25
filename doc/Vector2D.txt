@@ -1,0 +1,12 @@
+Inicialmente fiz a implementação manualmente e então fiz com que uma IA revisasse meu código.
+
+Na primeira revisão, a IA fez as seguintes observações:
+- `equals(const Vector2D&, float)` declared in Vector2D.hpp:56 has no definition
+   -> link error when used.
+
+Após aplicar as devidas correções assistidas pela IA, esse foi o resultado da segunda revisão:
+- `#include <cmath>` added.
+- `equals` defined using `std::abs`, comparing against `rhs.x`/`rhs.y`
+  (report-0.0.1 item 3).
+- Every declaration in Vector2D.hpp and Transform2D.hpp has a matching
+  definition in 541b7d1; no unresolved symbols expected.

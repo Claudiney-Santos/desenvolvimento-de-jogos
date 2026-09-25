@@ -1,4 +1,5 @@
 #include "Vector2D.hpp"
+#include <cmath>
 
 [[nodiscard]] Vector2D Vector2D::normalized() const {
     float len = length();
@@ -9,6 +10,10 @@ void Vector2D::normalize() {
     float len = length();
     x /= len;
     y /= len;
+}
+
+[[nodiscard]] bool Vector2D::equals(const Vector2D& rhs, float tolerance) const noexcept {
+    return std::abs(x - rhs.x) <= tolerance && std::abs(y - rhs.y) <= tolerance;
 }
 
 [[nodiscard]] Vector2D Vector2D::operator+(const Vector2D& rhs) const noexcept {

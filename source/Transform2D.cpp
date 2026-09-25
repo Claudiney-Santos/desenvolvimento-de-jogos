@@ -1,23 +1,23 @@
 #include "Transform2D.hpp"
 #include <cmath>
 
-[[nodiscard]] static Transform2D translation(float tx, float ty) noexcept {
+[[nodiscard]] Transform2D Transform2D::translation(float tx, float ty) noexcept {
     Transform2D matrix;
     matrix.m[2][0] = tx;
     matrix.m[2][1] = ty;
     return matrix;
 }
 
-[[nodiscard]] static Transform2D rotation(float angle_rad) noexcept {
+[[nodiscard]] Transform2D Transform2D::rotation(float angle_rad) noexcept {
     Transform2D matrix;
-    matrix.m[0][0] = cos(angle_rad);
-    matrix.m[0][1] = sin(angle_rad);
-    matrix.m[1][0] = -sin(angle_rad);
-    matrix.m[1][1] = cos(angle_rad);
+    matrix.m[0][0] = std::cos(angle_rad);
+    matrix.m[0][1] = std::sin(angle_rad);
+    matrix.m[1][0] = -std::sin(angle_rad);
+    matrix.m[1][1] = std::cos(angle_rad);
     return matrix;
 }
 
-[[nodiscard]] static Transform2D scale(float sx, float sy) noexcept {
+[[nodiscard]] Transform2D Transform2D::scale(float sx, float sy) noexcept {
     Transform2D matrix;
     matrix.m[0][0] = sx;
     matrix.m[1][1] = sy;
@@ -26,10 +26,10 @@
 
 [[nodiscard]] Transform2D Transform2D::operator*(const Transform2D& rhs) const noexcept {
     Transform2D matrix;
-    for(int i;i<3;i++) {
-        for(int j;j<3;j++) {
+    for(int i=0;i<3;i++) {
+        for(int j=0;j<3;j++) {
             matrix.m[i][j] = 0;
-            for(int k;k<3;k++) {
+            for(int k=0;k<3;k++) {
                 matrix.m[i][j] += m[i][k]*rhs.m[k][j];
             }
         }
@@ -39,8 +39,8 @@
 
 Transform2D& Transform2D::operator*=(const Transform2D& rhs) noexcept {
     Transform2D matrix = (*this) * rhs;
-    for(int i;i<3;i++) {
-        for(int j;j<3;j++) {
+    for(int i=0;i<3;i++) {
+        for(int j=0;j<3;j++) {
             m[i][j] = matrix.m[i][j];
         }
     }

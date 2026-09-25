@@ -1,3 +1,5 @@
+# Metodologia
+
 Inicialmente fiz a implementação manualmente e então fiz com que uma IA revisasse meu código.
 
 Na primeira revisão, a IA fez as seguintes observações:
@@ -16,3 +18,91 @@ Após aplicar as devidas correções assistidas pela IA, esse foi o resultado da
   (report-0.0.1 item 2).
 - Row-major DirectX matrix convention intact; division preconditions
   (`|scalar| > EPSILON`) honored.
+
+# Implementação
+
+`Transform2D.cpp` define as funções de membro declaradas e não
+definidas em `Transform2D.hpp`. A convenção adotada (estilo
+DirectX) é: matrizes row-major `m[row][col]`, vetores-linha e
+translação na terceira linha.
+
+# Factories
+
+Existem 3 funções factories (constroem matrizes com propósitos
+específicos): translation, rotation e scale.
+
+## Transform2D::translation
+
+Cria matrizes de translação que movem pontos por (`tx`, `ty`)
+unidades, sendo a matriz resultante:
+
+|    |    |   |
+| -- | -- | - |
+| 1  | 0  | 0 |
+| 0  | 1  | 0 |
+| tx | ty | 1 |
+
+Matrizes NxN não permitem translação em N dimensões. Com uma
+terceira dimensão (coordenadas homogêneas), supõe-se que pontos
+têm o terceiro componente igual a 1, ou seja, `(a, b, 1)`.
+Multiplicando pela matriz, o resultado é `(a + tx, b + ty, 1)`.
+
+## Transform2D::rotation
+
+Rotaciona um vetor em torno da origem por um ângulo `angle_rad`
+(positivo = anti-horário), pela fórmula:
+
+|        |       |   |
+| ------ | ----- | - |
+| cos x  | sin x | 0 |
+| -sin x | cos x | 0 |
+| 0      | 0     | 1 |
+
+Basta atribuir `std::cos(angle_rad)` e `std::sin(angle_rad)` às
+posições correspondentes da matriz.
+
+## Transform2D::scale
+
+Escala um vetor nas duas dimensões de forma independente, em torno
+da origem, com a matriz:
+
+|    |    |   |
+| -- | -- | - |
+| sx | 0  | 0 |
+| 0  | sy | 0 |
+| 0  | 0  | 1 |
+
+Escala `(a, b)` para `(a * sx, b * sy)`.
+
+# Operadores e métodos
+
+## Transform2D::operator*
+
+Multiplicação de matrizes: cada item (i, j) da matriz resultante é
+a soma dos produtos dos componentes da linha i de `*this` pela
+coluna j de `rhs` — dois loops externos sobre (i, j) e um loop
+interno `k` acumulando com `+=`.
+
+Essa operação encadeia transformações. Como a multiplicação de
+matrizes não é comutativa, `A * B` aplica a transformação de A
+primeiro e depois B (composição da esquerda para a direita,
+conforme documentado no header).
+
+## Transform2D::operator*=
+
+Usa o `operator*` e, em vez de retornar uma nova matriz, copia o
+resultado de volta para a matriz original, alterando seu conteúdo.
+
+## Transform2D::transform_point
+
+Aplica a transformação ao ponto `point` (tratado como `[x, y, 1]`),
+incluindo a translação da terceira linha. Por serem poucos
+componentes, é escrito diretamente, sem loops.
+
+## Transform2D::transform_vector
+
+Semelhante ao `transform_point`, porém trata o vetor como direção
+`[x, y, 0]` e ignora a terceira linha (a translação não é
+aplicada). Útil para transformar direções (ex.: a orientação de um
+objeto) com a mesma matriz usada para a posição, reduzindo os
+cálculos ao desconsiderar a translação.

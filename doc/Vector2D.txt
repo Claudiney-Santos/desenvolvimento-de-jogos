@@ -1,3 +1,5 @@
+# Metodologia
+
 Inicialmente fiz a implementação manualmente e então fiz com que uma IA revisasse meu código.
 
 Na primeira revisão, a IA fez as seguintes observações:
@@ -10,3 +12,85 @@ Após aplicar as devidas correções assistidas pela IA, esse foi o resultado da
   (report-0.0.1 item 3).
 - Every declaration in Vector2D.hpp and Transform2D.hpp has a matching
   definition in 541b7d1; no unresolved symbols expected.
+
+# Implementação
+
+A implementação das funções do arquivo `Vector2D.cpp` define as
+funções de membro e operadores que foram apenas declarados no header
+`Vector2D.hpp`.
+
+Sendo estas funções:
+
+- Vector2D::normalized
+- Vector2D::normalize
+- Vector2D::equals
+- Vector2D::operator+
+- Vector2D::operator-
+- Vector2D::operator* (vec * scalar)
+- Vector2D::operator* (scalar * vec)
+- Vector2D::operator/
+- Vector2D::operator+=
+- Vector2D::operator-=
+- Vector2D::operator*=
+- Vector2D::operator/=
+
+# Vector2D::normalized
+
+O método `normalized` normaliza o vetor para ter módulo = 1. Para
+tal, o vetor é dividido pela sua própria distância (`length()`).
+Retorna por valor uma cópia do vetor normalizado, ou seja, não
+modifica o vetor original.
+
+Para evitar divisão por zero, se o comprimento for exatamente 0
+(vetor nulo), retorna-se o vetor nulo `Vector2D(0, 0)` — o vetor
+nulo não possui direção definida (`@pre length() > EPSILON`).
+
+# Vector2D::normalize
+
+Faz o mesmo que `Vector2D::normalized`, porém modifica o próprio
+vetor em vez de retornar um novo. Também possui a guarda `len == 0`:
+o vetor nulo não é alterado (no-op), evitando a divisão por zero
+que geraria NaN.
+
+# Vector2D::equals
+
+Compara se dois vetores são aproximadamente iguais dentro de uma
+tolerância (padrão `EPSILON`). Cada componente é verificado
+individualmente: a diferença absoluta `std::abs(a - b)` deve ser
+menor ou igual à tolerância para que os vetores sejam considerados
+iguais.
+
+# Vector2D::operator+ e Vector2D::operator-
+
+O overloading dos operadores faz a classe Vector2D agir como os
+vetores da álgebra linear:
+
+- soma: v + u = (v.x + u.x, v.y + u.y)
+- subtração: v - u = (v.x - u.x, v.y - u.y)
+
+Vetores só são somados/subtraídos com outros vetores. Ambas as
+operações retornam um novo vetor e não alteram o original.
+
+# Vector2D::operator* (vec * scalar) e Vector2D::operator/
+
+Multiplicam e dividem cada componente do vetor por um escalar.
+Pelo objeto implícito das funções de membro, a ordem permitida é
+apenas `vector * scalar` e `vector / scalar`.
+
+A divisão tem o contrato `@pre std::abs(scalar) > EPSILON`
+(o divisor não pode ser nulo nem próximo de zero).
+
+# operator* (scalar * vec)
+
+Como a multiplicação por escalar é comutativa, define-se o
+overloading fora da classe para permitir a ordem invertida,
+reutilizando o `Vector2D::operator*` já definido: `scalar * vector`.
+
+# Vector2D::operator+=, -=, *= e /=
+
+Modificam o vetor original aplicando as operações de soma,
+subtração, multiplicação e divisão, respectivamente. Comportam-se
+como os operadores não compostos, com a diferença de alterar o
+vetor diretamente e retornar por referência (não por valor).
+A divisão composta segue o mesmo contrato
+`@pre std::abs(scalar) > EPSILON`.

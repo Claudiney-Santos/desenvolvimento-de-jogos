@@ -1,0 +1,29 @@
+# RigidBody2D.cpp
+
+## Metodologia
+
+Assim como na entrega anterior, inicialmente fiz a implementação manualmente e então fiz com que uma IA revisasse meu código.
+
+A IA fez a seguinte observação:
+- `RigidBody2D.cpp`: `integrate` updates velocity before position, as
+  documented.
+
+## Implementação
+
+`RigidBody2D.cpp` define as funções de membro declaradas e não
+definidas em `RigidBody2D.hpp`. A struct guarda o estado do movimento
+em espaço contínuo: `position` (pixels), `velocity` (pixels por
+segundo) e `acceleration` (pixels por segundo ao quadrado).
+
+### RigidBody2D::integrate
+
+Avança o corpo por um passo de simulação usando o método de Euler
+semi-implícito (simplético):
+
+    velocity += acceleration * dt;
+    position += velocity     * dt;   // usa a velocidade já atualizada
+
+A velocidade é atualizada antes da posição, então a posição usa a
+velocidade recém-atualizada do passo. Esse esquema é estável para
+simulação interativa e, com timestep fixo (o mesmo `dt` durante toda a
+execução), torna o movimento reprodutível, conforme `@pre dt > 0`.

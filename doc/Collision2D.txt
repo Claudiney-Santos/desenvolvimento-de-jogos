@@ -1,6 +1,4 @@
-# Collision2D.cpp
-
-## Metodologia
+# Metodologia
 
 Assim como na entrega anterior, inicialmente fiz a implementação manualmente e então fiz com que uma IA revisasse meu código.
 
@@ -8,13 +6,15 @@ A IA fez a seguinte observação:
 - `Collision2D.cpp`: `AABB::intersects` (strict `<` -> touching edges count as
   overlap, per doc), `Collision2D::bounds` (`position ± halfExtents`).
 
-## Implementação
+# Implementação
 
 `Collision2D.cpp` define as funções de membro declaradas e não
 definidas em `Collision2D.hpp`. É detecção narrow-phase apenas: dados
 dois boxes, verifica se há sobreposição.
 
-### AABB::intersects
+# AABB
+
+## AABB::intersects
 
 Testa a sobreposição de dois boxes alinhados aos eixos com o teste de
 separação por eixos. Dois boxes são disjuntos apenas se um estiver
@@ -28,7 +28,9 @@ Como as comparações usam `<` estrito, bordas que se tocam (ex.:
 tocar nas bordas conta como sobreposição, conforme o contrato no
 header.
 
-### Collision2D::bounds
+# Collision2D
+
+## Collision2D::bounds
 
 Constrói o AABB em espaço do mundo, centrado em `position`, a partir
 dos meios-extensões (halfExtents):

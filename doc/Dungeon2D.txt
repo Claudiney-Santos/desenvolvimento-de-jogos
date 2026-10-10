@@ -1,0 +1,127 @@
+# Metodologia
+
+Tal qual recomendado em aula, a implementação foi realizada por um agente de IA.
+O prompt fornecido especificava que nenhum arquivo .hpp deveria ser alterado ou criado,
+limitando a IA a criar/modificar apenas os arquivos .cpp.
+A IA foi instruída a implementar Dungeon2D.cpp, e, em seguida, revisar o código gerado.
+Então eu estudei o código gerado.
+A revisão gerada foi a seguinte:
+===
+## Changes
+
+- `Dungeon2D.cpp`: BSP generator — constructor, `generate(unsigned seed)` with
+  recursive splitting (`MIN_ROOM = 5`, `ROOM_MARGIN = 1`, `CORRIDOR_W = 3`),
+  room carving, L-shaped corridor connection between sibling subtrees.
+
+## Validation vs headers
+
+| Declaration | Definition | Status |
+|---|---|---|
+| `Dungeon2D(int, int)` (Dungeon2D.hpp:83) | Dungeon2D.cpp:123 | ok, asserts `> 0` |
+| `Dungeon2D::generate(unsigned)` (Dungeon2D.hpp:92) | Dungeon2D.cpp:127 | ok, `@post` honored (root, corridors, constraints) |
+
+- Dungeon constraints satisfied: corridors 3 tiles wide, smallest room 5x5,
+  connectivity (corridor between every sibling pair; tree spans all leaves).
+
+## Notes (not violations)
+
+- Dungeons below ~14 tiles per axis cannot split (each half needs
+  `5 + 2*1 = 7`); rooms clamp to the region, so for tiny inputs the 5x5
+  minimum cannot physically hold (constructor precondition is only `> 0`).
+- Rare fallback: if a room cannot keep its 1-tile margin it sits flush against
+  the region border, so two sibling rooms could touch (cosmetic only).
+- Corridor rects may overlap rooms/other corridors; rasterization idempotent.
+
+## Verification
+
+- `clang++ -std=c++17 -Wall -Wextra -fsyntax-only source/*.cpp`
+  -> 0 code warnings.
+- Smoke test (64x64, seed 42): 12 rooms, 24 corridor segments, 1658 empty
+  cells, flood-fill reached all (connectivity holds); CSV save/load round-trip
+  identical.
+
+## Status
+
+- All declarations have matching definitions; contracts and conventions
+  honored. No fixes required.
+===
+
+# Implementação
+
+`Dungeon2D.cpp` define as funções declaradas e não definidas em
+`Dungeon2D.hpp` e implementa o gerador BSP que produz a geometria
+explícita da dungeon (a árvore de salas e a lista de corredores).
+Todas as coordenadas estão em unidades de TILE (índices inteiros de
+célula), não em pixels. As funções implementadas são:
+
+- `Dungeon2D::Dungeon2D(int, int)` — construtor;
+- `Dungeon2D::generate(unsigned)` — gera a árvore BSP, salas e corredores;
+- auxiliares em namespace anônimo: `randInt`, `regionWidth`,
+  `regionHeight`, `canSplit`, `carveRoom`, `collectRooms`, `connect`,
+  `buildNode`.
+
+# Construtor e geração
+
+## Dungeon2D::Dungeon2D
+
+Armazena `width` e `height` e verifica, via `assert`, a pré-condição
+do header: ambas as dimensões devem ser maiores que zero. A árvore
+(`root`) permanece nula e a lista de corredores vazia até `generate()`
+ser chamado.
+
+## Dungeon2D::generate
+
+Cria um `std::mt19937` semeado com `seed` — a mesma semente produz a
+mesma dungeon (determinismo), cumprindo o contrato do header. Limpa
+`corridors`, cria o nó raiz com a região `{0, 0, width-1, height-1}`
+e inicia a recursão com `buildNode`.
+
+# Divisão BSP e salas
+
+## buildNode (função auxiliar)
+
+Função recursiva que, a cada nó, decide entre dois caminhos:
+
+- **Folha**: quando a região não pode mais ser dividida (`canSplit`
+  retorna falso) ou com probabilidade de 15% (sorteio
+  `uniform_real_distribution` > 0.85). Nesse caso grava uma sala com
+  `carveRoom`.
+- **Nó interno**: divide a região em dois (vertical ou horizontal).
+  Uma região só é divisível num eixo quando mede pelo menos
+  `2 * minHalf`, com `minHalf = MIN_ROOM + 2*ROOM_MARGIN = 7`, o que
+  garante que cada metade comporte uma sala de 5x5 com 1 tile de
+  margem. O corte é sorteado entre `left + minHalf` e
+  `right - minHalf + 1`. Cria os filhos `left`/`right` (cada um
+  dono da própria sub-região), recorre sobre ambos e então chama
+  `connect`.
+
+Como a árvore é composta por `unique_ptr`, a destruição da raiz
+libera toda a estrutura.
+
+## carveRoom (função auxiliar)
+
+Sorteia as dimensões da sala entre o mínimo (`MIN_ROOM = 5`) e o
+máximo possível dentro da região (`região - 2*ROOM_MARGIN`), e a
+posiciona com 1 tile de margem em relação às bordas da região. Se a
+região for pequena demais para a margem, a sala é encostada na borda
+esquerda/superior como fallback (não viola a conectividade).
+
+# Corredores e conectividade
+
+## connect (função auxiliar)
+
+Recebe um nó interno e escolhe, com `collectRooms`, uma sala
+aleatória de cada sub-árvore (`left` e `right`). Sorteia um ponto
+`(x1, y1)` dentro da sala da esquerda e `(x2, y2)` dentro da sala da
+direita, e constrói um corredor em "L": dois retângulos de 3 tiles de
+largura (`CORRIDOR_W = 3`, meia-largura `half = 1`), um horizontal
+alinhado a `y1` e um vertical alinhado a `x2` (ou a ordem inversa,
+sorteada). Como `connect` é chamado para todo nó interno, todos os
+ramos da árvore ficam interligados — garantindo a propriedade de
+conectividade exigida pelo header.
+
+## collectRooms (função auxiliar)
+
+Percorre a sub-árvore iterativamente (pilha) e coleta o `Rect` de
+toda folha, devolvendo a lista de salas do ramo. É usada por
+`connect` para escolher a sala de cada lado.

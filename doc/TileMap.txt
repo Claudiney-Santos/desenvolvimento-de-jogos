@@ -1,0 +1,133 @@
+# Metodologia
+
+Tal qual recomendado em aula, a implementação foi realizada por um agente de IA.
+O prompt fornecido especificava que nenhum arquivo .hpp deveria ser alterado ou criado,
+limitando a IA a criar/modificar apenas os arquivos .cpp.
+A IA foi instruída a implementar TileMap.cpp, e, em seguida, revisar o código gerado.
+Então eu estudei o código gerado.
+A revisão gerada foi a seguinte:
+===
+## Changes
+
+- `TileMap.cpp`: rasterization from `Dungeon2D`, CSV save/load, queries,
+  world<->tile translation, `randomEmptyCell`.
+
+## Validation vs headers
+
+| Declaration | Definition | Status |
+|---|---|---|
+| `TileMap::loadFromDungeon` (TileMap.hpp:34) | TileMap.cpp:19 | ok, fills WALL then carves rooms + corridors |
+| `TileMap::saveCSV` (TileMap.hpp:42) | TileMap.cpp:53 | ok, exact format, no trailing comma |
+| `TileMap::loadCSV` (TileMap.hpp:48) | TileMap.cpp:67 | ok, rollback on failure, map unchanged |
+| `width`/`height`/`at`/`isWall`/`data` | TileMap.cpp:100-121 | ok, `@pre` asserted |
+| `toIndices` (TileMap.hpp:65) | TileMap.cpp:125 | ok, `floor(world/TILE_SIZE)`, matches Global.hpp |
+| `toWorld` (TileMap.hpp:68) | TileMap.cpp:129 | ok, centre `(col+0.5)*TILE_SIZE` |
+| `randomEmptyCell` (TileMap.hpp:76) | TileMap.cpp:133 | ok, uniform over EMPTY_TILE cells, `@pre` asserted |
+
+- Same seed yields the same dungeon (`std::mt19937 rng(seed)`).
+- BSP tree owns children via `unique_ptr`; `root` rebuilt on each `generate()`.
+
+## Notes (not violations)
+
+- `loadCSV` skips blank lines, slightly lenient vs the exact format.
+- `data()` on an empty map returns `m_cells.data()` (valid, size 0).
+- `assert`-only preconditions (`at`, `isWall`, `randomEmptyCell`) are UB under
+  `NDEBUG`, consistent with existing code style.
+
+## Verification
+
+- `clang++ -std=c++17 -Wall -Wextra -fsyntax-only source/*.cpp`
+  -> 0 code warnings.
+- Smoke test (64x64, seed 42): 12 rooms, 24 corridor segments, 1658 empty
+  cells, flood-fill reached all (connectivity holds); CSV save/load round-trip
+  identical.
+
+## Status
+
+- All declarations have matching definitions; contracts and conventions
+  honored. No fixes required.
+===
+
+# Implementação
+
+`TileMap.cpp` define as funções declaradas e não definidas em
+`TileMap.hpp`: a rasterização de um `Dungeon2D` para a matriz de
+tiles, a persistência em CSV, as consultas e a conversão entre
+coordenadas contínuas (mundo) e discretas (célula). A matriz é
+armazenada em row-major (`índice = row * width + col`) com um inteiro
+por célula, usando `EMPTY_TILE` (0) e `WALL_TILE` (1) de `Global.hpp`.
+As funções implementadas são:
+
+- `TileMap::loadFromDungeon(const Dungeon2D&)`;
+- `TileMap::saveCSV` / `TileMap::loadCSV`;
+- `TileMap::width` / `height` / `at` / `isWall` / `data`;
+- `TileMap::toIndices` / `toWorld`;
+- `TileMap::randomEmptyCell`.
+
+# Rasterização
+
+## TileMap::loadFromDungeon
+
+Dimensiona a matriz para `width x height` da dungeon e a preenche
+inteiramente com `WALL_TILE`. Em seguida percorre a árvore BSP
+iterativamente (pilha): para cada folha, grava `EMPTY_TILE` em todas
+as células da sala (`room.top..room.bottom` × `room.left..room.right`).
+Por fim, grava `EMPTY_TILE` nas células de cada `Corridor` da lista.
+Todo acesso é verificado contra os limites da matriz, evitando
+escritas fora da dungeon.
+
+# Persistência CSV
+
+## TileMap::saveCSV
+
+Abre `std::ofstream` no caminho dado; se a abertura falhar, retorna
+`false`. Escreve uma linha por fileira (row 0 primeiro), com os
+inteiros separados por vírgula simples, sem vírgula final, e `\n` ao
+fim de cada linha. Retorna o estado do stream (`out.good()`), de modo
+que um erro de escrita também resulta em `false`.
+
+## TileMap::loadCSV
+
+Abre `std::ifstream`; falha na abertura retorna `false`. Lê linha a
+linha (ignorando linhas vazias), quebrando cada linha por `,` e
+convertendo cada token com `strtol`. Um token vazio ou inválido (ex.:
+vírgula final) faz a função falhar. Todas as linhas devem ter a
+mesma largura; uma fileira de largura diferente também causa falha.
+A matriz só é construída temporariamente e atribuída ao mapa ao final,
+de modo que, em caso de falha, o mapa permanece inalterado — honrando
+a pós-condição do header.
+
+# Consultas
+
+## TileMap::width / height / at / isWall / data
+
+`width()` e `height()` devolvem `m_width` e `m_height`. `at(col, row)`
+verifica, via `assert`, a pré-condição de índices no intervalo e
+devolve `m_cells[row * width + col]`. `isWall(col, row)` é `true`
+quando `at(col, row) == WALL_TILE`. `data()` devolve o ponteiro
+row-major para a matriz bruta (`m_cells.data()`), de tamanho
+`width * height`.
+
+# Conversão contínuo <-> discreto
+
+## TileMap::toIndices
+
+Calcula a célula que contém uma posição de mundo usando a convenção
+de `Global.hpp`: `col = floor(world.x / TILE_SIZE)` e
+`row = floor(world.y / TILE_SIZE)`. Por usar `std::floor`, o cálculo
+também é coerente para coordenadas negativas.
+
+## TileMap::toWorld
+
+Devolve as coordenadas de mundo do CENTRO da célula, também conforme
+`Global.hpp`: `((col + 0.5) * TILE_SIZE, (row + 0.5) * TILE_SIZE)`.
+
+# Seleção de célula vazia
+
+## TileMap::randomEmptyCell
+
+Percorre a matriz coletando os índices de todas as células
+`EMPTY_TILE` e verifica, via `assert`, a pré-condição de que existe
+pelo menos uma célula vazia. Sorteia um índice uniformemente com
+`std::mt19937` (semeado com `std::random_device`) e decompõe o índice
+linear de volta em `(col, row)`.

@@ -1,0 +1,13 @@
+# Metodologia
+
+A implementação de NPC está em NPC.hpp, NPC.cpp foi criado meramente para manter a padronização (header + implementação cpp).
+
+# Implementação
+
+`NPC.cpp` é uma unidade de tradução que apenas inclui `NPC.hpp`; não
+define nenhuma função. A struct `NPC` herda de `Entity` e adiciona um
+único membro de dados público, `sf::Sprite sprite`, que é posicionado
+e desenhado diretamente pelo loop de jogo a cada frame.
+
+Assim como em `Entity`, o arquivo `.cpp` existe apenas para manter a
+convenção de um `.cpp` por `.hpp`.

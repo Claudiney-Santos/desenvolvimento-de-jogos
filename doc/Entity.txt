@@ -1,0 +1,16 @@
+# Metodologia
+
+A implementação de Entity está em Entity.hpp, Entity.cpp foi criado meramente para manter a padronização (header + implementação cpp).
+
+# Implementação
+
+`Entity.cpp` é uma unidade de tradução que apenas inclui `Entity.hpp`;
+não define nenhuma função out-of-line. Toda a classe `Entity` está
+definida no header: o destrutor virtual é `virtual ~Entity() =
+default` e o método `bounds()` é inline
+(`return collision.bounds(body.position);`).
+
+A struct agrega um `RigidBody2D body` e um `Collision2D collision`
+(ambos públicos), além de `active` (flag de simulação/colisão) e `id`
+(`EntityId`, zero = ainda não atribuído). O arquivo `.cpp` existe
+apenas para manter a convenção de um `.cpp` por `.hpp`.

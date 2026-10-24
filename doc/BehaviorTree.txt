@@ -1,0 +1,149 @@
+# Metodologia
+
+A implementação foi realizada por um agente de IA.
+O prompt fornecido especificava que nenhum arquivo .hpp deveria ser alterado ou criado,
+limitando a IA a criar/modificar apenas os arquivos .cpp.
+A IA foi instruída a implementar Behavior.cpp, e, em seguida, revisar o código gerado.
+Então eu estudei o código gerado.
+A revisão gerada foi a seguinte:
+===
+## Changes
+
+### New contract
+- `BehaviorTree.hpp`: stateless behaviour tree — `BTContext` (named integer
+  facts), `BTResult` (success flag + command), abstract `BTNode` (`tick`),
+  concrete `SelectorNode`/`SequenceNode`/`ConditionNode`/`ActionNode`,
+  construction helpers (`Condition`, `Action`, `Selector`, `Sequence`), and
+  `BehaviorTree` (owns the root, `tick` returns a command string).
+
+### Implementation
+- `BehaviorTree.cpp`: node constructors, `tick` overrides, `BehaviorTree`
+  constructor and `tick`.
+
+## Validation vs headers
+
+| Declaration | Definition | Status |
+|---|---|---|
+| `SelectorNode::SelectorNode` (BehaviorTree.hpp:62) | BehaviorTree.cpp:3 | ok, signature matches |
+| `SelectorNode::tick` (BehaviorTree.hpp:63) | BehaviorTree.cpp:6 | ok, `[[nodiscard]]` + `const` match |
+| `SequenceNode::SequenceNode` (BehaviorTree.hpp:70) | BehaviorTree.cpp:16 | ok, signature matches |
+| `SequenceNode::tick` (BehaviorTree.hpp:71) | BehaviorTree.cpp:19 | ok, last non-empty command |
+| `ConditionNode::ConditionNode` (BehaviorTree.hpp:78) | BehaviorTree.cpp:33 | ok, signature matches |
+| `ConditionNode::tick` (BehaviorTree.hpp:79) | BehaviorTree.cpp:36 | ok, non-zero lookup |
+| `ActionNode::ActionNode` (BehaviorTree.hpp:86) | BehaviorTree.cpp:45 | ok, signature matches |
+| `ActionNode::tick` (BehaviorTree.hpp:87) | BehaviorTree.cpp:48 | ok, always succeeds |
+| `BehaviorTree::BehaviorTree` (BehaviorTree.hpp:123) | BehaviorTree.cpp:53 | ok, signature matches |
+| `BehaviorTree::tick` (BehaviorTree.hpp:129) | BehaviorTree.cpp:56 | ok, `""` on failure |
+
+- `Condition`/`Action` (BehaviorTree.hpp:98/102) and `Selector`/`Sequence`
+  (BehaviorTree.hpp:106/113) are inline/template helpers, defined in the
+  header; no out-of-line definitions required.
+- Node semantics match the header prose: `Condition` succeeds iff the context
+  holds a non-zero value for its name (BehaviorTree.cpp:36-43); `Action` always
+  succeeds and carries its command (BehaviorTree.cpp:48-51); `Sequence` fails
+  at the first failing child and carries the last non-empty command
+  (BehaviorTree.cpp:19-31); `Selector` returns the first succeeding child's
+  command (BehaviorTree.cpp:6-14); `BehaviorTree::tick` returns the root's
+  command or `""` when the root fails (BehaviorTree.cpp:56-61).
+
+## Notes (not violations)
+
+- `BehaviorTree::tick` guards a null root and returns `""` — robustness beyond
+  the stated contract (no `@pre` forbids a null root); not a violation.
+- `ActionNode::tick` ignores its `context` parameter (cast to void) by design:
+  an action does not inspect the context.
+
+## Verification
+
+- `clang++ -std=c++17 -Wall -Wextra -fsyntax-only source/*.cpp`
+  -> 0 code warnings.
+
+## Status
+
+- All declarations in the new headers have matching definitions; no unresolved
+  symbols expected. No fixes required.
+===
+
+# Implementação
+
+`BehaviorTree.cpp` define as funções de membro declaradas e não
+definidas em `BehaviorTree.hpp`: os construtores dos nós
+(`SelectorNode`, `SequenceNode`, `ConditionNode`, `ActionNode`) e de
+`BehaviorTree`, além do método `tick` de cada nó e da própria árvore.
+
+Sendo estas funções:
+
+- SelectorNode::SelectorNode
+- SelectorNode::tick
+- SequenceNode::SequenceNode
+- SequenceNode::tick
+- ConditionNode::ConditionNode
+- ConditionNode::tick
+- ActionNode::ActionNode
+- ActionNode::tick
+- BehaviorTree::BehaviorTree
+- BehaviorTree::tick
+
+# Nós compostos
+
+## SelectorNode::SelectorNode
+
+Construtor que move a lista de filhos recebida para o membro
+`m_children`, armazenando-a como `std::vector<BTNodePtr>`.
+
+## SelectorNode::tick
+
+Percorre os filhos da esquerda para a direita e retorna o resultado
+do primeiro filho que reportar `success == true`, propagando também o
+comando carregado por ele. Se todos os filhos falharem, retorna
+`{ false, "" }` — ou seja, o seletor falha sem comando.
+
+## SequenceNode::SequenceNode
+
+Construtor análogo ao de `SelectorNode`: move a lista de filhos para
+`m_children`.
+
+## SequenceNode::tick
+
+Executa os filhos em ordem, da esquerda para a direita. Ao primeiro
+filho que falhar, retorna imediatamente `{ false, "" }` (fail-fast).
+Caso todos os filhos sucedam, retorna `{ true, lastCommand }`, onde
+`lastCommand` é o último comando não vazio produzido pelos filhos —
+condições bem-sucedidas não carregam comando e, portanto, não
+sobrescrevem o último comando útil.
+
+# Nós folha
+
+## ConditionNode::ConditionNode
+
+Construtor que armazena o nome do fato a ser consultado em `m_name`.
+
+## ConditionNode::tick
+
+Procura `m_name` no contexto (uma lista de pares `{ string, int }`).
+Se o nome for encontrado com valor não nulo, retorna `{ true, "" }`
+(sucesso, sem comando); se não for encontrado ou tiver valor zero,
+retorna `{ false, "" }`.
+
+## ActionNode::ActionNode
+
+Construtor que armazena a string de comando em `m_command`.
+
+## ActionNode::tick
+
+Sempre retorna `{ true, m_command }`. O parâmetro `context` é
+ignorado (marcado com `(void)`), pois uma ação não inspeciona o
+contexto.
+
+# BehaviorTree
+
+## BehaviorTree::BehaviorTree
+
+Construtor que move o nó raiz recebido para `m_root`.
+
+## BehaviorTree::tick
+
+Avalia a árvore uma única vez contra `context`. Se `m_root` for nulo,
+retorna `""` (nenhum comando). Caso contrário, chama `m_root->tick`
+e retorna o comando do resultado quando `success` é verdadeiro, ou
+`""` quando a raiz falha.

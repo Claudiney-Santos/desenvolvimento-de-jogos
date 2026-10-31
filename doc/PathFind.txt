@@ -1,0 +1,123 @@
+# Metodologia
+
+A implementação foi realizada por um agente de IA.
+O prompt fornecido especificava que nenhum arquivo .hpp deveria ser alterado ou criado,
+limitando a IA a criar/modificar apenas os arquivos .cpp.
+A IA foi instruída a implementar PathFind.cpp, e, em seguida, revisar o código gerado.
+Então eu estudei o código gerado.
+A revisão gerada foi a seguinte:
+===
+### Implementation
+- `PathFind.cpp`: constructor stores pointer/width/height; `findPath` runs A*
+  with an octile heuristic (`max(dx,dy) + (sqrt2-1)*min(dx,dy)`), `gScore` /
+  `cameFrom` / `closed` vectors, a `std::priority_queue` open list, the
+  8-neighbour cost table, and reconstructs the cell path.
+
+## Validation vs headers
+
+| Declaration | Definition | Status |
+|---|---|---|
+| `PathFind::PathFind(const int*, int, int)` (PathFind.hpp:27) | PathFind.cpp:30 | ok, signature matches |
+| `PathFind::findPath(const Vector2D&, const Vector2D&) const` `[[nodiscard]]` (PathFind.hpp:40) | PathFind.cpp:33 | ok, return/params/cv/`[[nodiscard]]` match |
+
+- Row-major indexing: `m_grid[row*m_width + col]` (PathFind.cpp:44) and
+  `row*m_width + col` (PathFind.cpp:53/103) honour `index = row*width + col`.
+- Walkable iff `EMPTY_TILE` (PathFind.cpp:43-45), matching the header and
+  `Global.hpp` tile legend.
+- Endpoint mapping `floor(world/TILE_SIZE)` (PathFind.cpp:35-38) matches
+  `Global.hpp`'s `col = floor(world.x / TILE_SIZE)` convention.
+- Diagonal corner rule: for a diagonal move both orthogonal neighbours are
+  re-tested `walkable` before the move is admitted (PathFind.cpp:97-101). Both
+  orthogonal cells stay in range because `nextCol`/`nextRow` were already
+  range-checked (PathFind.cpp:94), so no out-of-bounds access.
+- Output centres `(col+0.5f)*TILE_SIZE, (row+0.5f)*TILE_SIZE`
+  (PathFind.cpp:138-139) match `Global.hpp`'s centre formula.
+- Empty result on unreachable or off-grid/not-walkable endpoints
+  (PathFind.cpp:47-50, 118-121), matching the header's `@return` contract.
+- `m_grid` is stored by pointer, not copied; the object does not own the grid,
+  consistent with "must outlive this object".
+
+## Notes (not violations)
+
+- The header documents `width > 0` / `height > 0` but the constructor does not
+  assert it; a zero dimension would simply make `inRange` reject every cell and
+  `findPath` return empty. Not a contract violation (no `@pre` requires a
+  runtime guard), and consistent with the rest of the codebase.
+- The octile heuristic is admissible and consistent for 8-connectivity with
+  `sqrt2` diagonal cost, so A* is guaranteed optimal.
+
+## Status
+
+- The header's two declared members both have matching definitions; no missing
+  definitions or free-standing duplicates. No unresolved symbols expected. No
+  fixes required beyond the `[[nodiscard]]` consistency fix applied to
+  `PathFind.cpp:33`.
+===
+
+# Implementação
+
+`PathFind.cpp` define as funções de membro declaradas e não
+definidas em `PathFind.hpp`: o construtor `PathFind` e o método
+`findPath`, que calcula o menor caminho sobre uma matriz de tiles
+usando o algoritmo A* com conectividade 8.
+
+Sendo estas funções:
+
+- PathFind::PathFind
+- PathFind::findPath
+
+# Construtor
+
+## PathFind::PathFind
+
+Armazena o ponteiro para a matriz (`m_grid`), a largura (`m_width`)
+e a altura (`m_height`). A matriz é apenas referenciada, nunca
+copiada; o objeto não é dono da memória e a matriz deve sobreviver
+a ele, conforme o contrato do header.
+
+# Busca de caminho
+
+## PathFind::findPath
+
+Converte os pontos contínuos de início e objetivo (em pixels) para
+células da grade com a convenção de `Global.hpp`:
+
+    col = floor(x / TILE_SIZE)
+    row = floor(y / TILE_SIZE)
+
+Em seguida, valida os dois extremos com duas lambdas: `inRange`
+(limita a célula ao retângulo `[0, width) x [0, height)`) e
+`walkable` (célula livre se, e somente se, seu valor for
+`EMPTY_TILE`). Se qualquer extremo estiver fora da grade ou sobre
+uma parede, retorna um vetor vazio, como exige o contrato.
+
+Havendo extremos válidos, executa o A*. A função mantém três
+vetores indexados pelo identificador linear da célula
+(`row * width + col`, ordem row-major): `gScore` (custo acumulado do
+menor caminho conhecido até cada célula, iniciado em infinito),
+`cameFrom` (célula anterior no caminho, iniciado em `-1`) e `closed`
+(células já finalizadas). A lista aberta é uma
+`std::priority_queue` ordenada por `f = g + h`, onde a heurística
+adotada é a distância "octile":
+
+    h = max(|dx|, |dy|) + (sqrt2 - 1) * min(|dx|, |dy|)
+
+que é admissível e consistente para conectividade 8 com custo
+diagonal `sqrt2`, garantindo a otimalidade do A*.
+
+A expansão percorre 8 vizinhos: quatro ortogonais com custo `1` e
+quatro diagonais com custo `sqrt2`. Um movimento diagonal só é
+permitido quando as duas células ortogonais adjacentes àquela
+diagonal também são livres, de modo que o caminho nunca "raspa" a
+quina de uma parede. Cada vizinho em alcance e caminhável que ainda
+não foi fechado tem seu custo tentativo
+`tentative = gScore[atual] + custo` comparado ao `gScore` atual:
+se for menor, atualiza `gScore` e `cameFrom` e insere o vizinho na
+lista aberta.
+
+Ao alcançar o objetivo, o caminho de células é reconstruído de trás
+para frente a partir de `cameFrom`, invertido com `std::reverse`, e
+convertido em pontos contínuos: cada célula vira o centro
+`((col + 0.5) * TILE_SIZE, (row + 0.5) * TILE_SIZE)`, na ordem do
+início ao fim. Se o objetivo não for alcançado (e não coincidir com
+o início), retorna um vetor vazio.
